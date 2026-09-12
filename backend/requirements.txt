@@ -1,0 +1,11 @@
+flask==3.0.*
+flask-cors
+firebase-admin
+pyjwt
+python-dotenv
+joblib
+scikit-learn==1.3.*
+xgboost
+pandas
+numpy
+gunicorn

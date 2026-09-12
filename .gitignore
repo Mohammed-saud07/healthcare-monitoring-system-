@@ -1,0 +1,29 @@
+# Python
+venv/
+__pycache__/
+*.pyc
+*.pkl
+*.h5
+
+# Node
+node_modules/
+build/
+dist/
+
+# Flutter
+.dart_tool/
+.flutter-plugin-dependencies
+build/
+
+# Arduino / PlatformIO
+.pio/
+*.hex
+
+# Secrets - never commit these
+.env
+firebase-service-account.json
+google-services.json
+GoogleService-Info.plist
+
+# OS
+.DS_Store

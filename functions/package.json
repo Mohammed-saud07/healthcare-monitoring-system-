@@ -1,0 +1,12 @@
+{
+  "name": "healthcare-alert-functions",
+  "engines": { "node": "18" },
+  "main": "index.js",
+  "dependencies": {
+    "firebase-admin": "^11.11.0",
+    "firebase-functions": "^4.5.0",
+    "twilio": "^4.19.0",
+    "@sendgrid/mail": "^7.7.0"
+  },
+  "private": true
+}
