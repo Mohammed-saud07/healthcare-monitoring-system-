@@ -28,3 +28,4 @@ GoogleService-Info.plist
 # OS
 .DS_Store
 backend/firebase-admin-key.json
+ml/venv/
