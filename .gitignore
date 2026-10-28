@@ -29,3 +29,26 @@ GoogleService-Info.plist
 .DS_Store
 backend/firebase-admin-key.json
 ml/venv/
+
+# Environment variables and secrets
+.env
+.env.*
+!.env.example
+**/serviceAccountKey.json
+**/firebase-adminsdk*.json
+**/*service-account*.json
+
+# Python
+__pycache__/
+*.py[cod]
+venv/
+.venv/
+
+# Node.js
+node_modules/
+build/
+dist/
+
+# Local and generated files
+.DS_Store
+*.log

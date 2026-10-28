@@ -1,11 +1,7 @@
-// Import the functions you need from the SDKs you need
-import { initializeApp } from "firebase/app";
-import { getAnalytics } from "firebase/analytics";
-// TODO: Add SDKs for Firebase products that you want to use
-// https://firebase.google.com/docs/web/setup#available-libraries
+﻿import { initializeApp, getApp, getApps } from "firebase/app";
+import { getAuth } from "firebase/auth";
+import { getDatabase } from "firebase/database";
 
-// Your web app's Firebase configuration
-// For Firebase JS SDK v7.20.0 and later, measurementId is optional
 const firebaseConfig = {
   apiKey: "AIzaSyC9rJFZzq4c8bkLwnT_zQEGjxNevMN6MkM",
   authDomain: "healthcare-monitor-app.firebaseapp.com",
@@ -14,9 +10,9 @@ const firebaseConfig = {
   storageBucket: "healthcare-monitor-app.firebasestorage.app",
   messagingSenderId: "441950295241",
   appId: "1:441950295241:web:c235a977be46c0f7056918",
-  measurementId: "G-F3R5X37F1M"
 };
 
-// Initialize Firebase
-const app = initializeApp(firebaseConfig);
-const analytics = getAnalytics(app);
+const app = getApps().length ? getApp() : initializeApp(firebaseConfig);
+
+export const auth = getAuth(app);
+export const database = getDatabase(app);

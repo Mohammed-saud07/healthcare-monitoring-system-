@@ -1,82 +1,165 @@
-const functions = require("firebase-functions");
+
 const admin = require("firebase-admin");
-const twilio = require("twilio")(
-  functions.config().twilio.sid,
-  functions.config().twilio.token
-);
-const sgMail = require("@sendgrid/mail");
-sgMail.setApiKey(functions.config().sendgrid.key);
+const { onSchedule } = require("firebase-functions/v2/scheduler");
+const {
+  defineSecret,
+  defineString,
+} = require("firebase-functions/params");
 
 admin.initializeApp();
 
-const TWILIO_FROM = functions.config().twilio.from_number;
-const SENDER_EMAIL = functions.config().sendgrid.sender;
-const PROVIDER_EMAIL = functions.config().app.provider_email;
+// Must match your Firebase Realtime Database region.
+const DB_REGION = "us-central1";
 
-exports.onAlertPending = functions.database
-  .ref("/alerts/{patientId}/pending/{pushId}")
-  .onCreate(async (snapshot, context) => {
-    const alert = snapshot.val();
-    const { patientId } = context.params;
+// Telegram credentials remain server-side.
+const TELEGRAM_BOT_TOKEN = defineSecret("TELEGRAM_BOT_TOKEN");
 
-    let contacts = { docs: [] };
-    try {
-      contacts = await admin
-        .firestore()
-        .collection("patients")
-        .doc(patientId)
-        .collection("emergencyContacts")
-        .get();
-    } catch (err) {
-      console.error("Could not load emergency contacts:", err);
+const TELEGRAM_CHAT_ID = defineString("TELEGRAM_CHAT_ID", {
+  default: "DISABLED",
+});
+
+/**
+ * Send a Telegram message.
+ * Used only by the scheduled demo function in this file.
+ * Real emergency and custom messages are handled by Flask.
+ */
+async function sendTelegram(message) {
+  const token = TELEGRAM_BOT_TOKEN.value();
+  const chatId = TELEGRAM_CHAT_ID.value();
+
+  if (
+    !token ||
+    token === "DISABLED" ||
+    !chatId ||
+    chatId === "DISABLED"
+  ) {
+    throw new Error("Telegram is not configured.");
+  }
+
+  const response = await fetch(
+    `https://api.telegram.org/bot${token}/sendMessage`,
+    {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        chat_id: chatId,
+        text: String(message).slice(0, 4096),
+      }),
+    }
+  );
+
+  const result = await response.json();
+
+  if (!response.ok || !result.ok) {
+    throw new Error(
+      `Telegram delivery failed: ${
+        result.description || `HTTP ${response.status}`
+      }`
+    );
+  }
+
+  return {
+    messageId: result.result.message_id,
+  };
+}
+
+/**
+ * CarePulse demo notifications.
+ *
+ * These are simulated values, not actual patient readings.
+ * This function does not write simulated readings to Firebase
+ * and does not create or process emergency alerts.
+ */
+exports.sendCarePulseDemoTelegram = onSchedule(
+  {
+    schedule: "every 1 minutes",
+    timeZone: "Asia/Kolkata",
+    region: DB_REGION,
+    secrets: [TELEGRAM_BOT_TOKEN],
+  },
+  async () => {
+    const patientsSnapshot = await admin
+      .database()
+      .ref("/patients")
+      .once("value");
+
+    const patients = patientsSnapshot.val();
+
+    if (
+      !patients ||
+      typeof patients !== "object" ||
+      Array.isArray(patients)
+    ) {
+      console.log("Demo Telegram: no registered patients found.");
+      return;
     }
 
-    let location = null;
-    try {
-      location = (
-        await admin.database().ref(`/location/${patientId}`).once("value")
-      ).val();
-    } catch (err) {
-      console.error("Could not load location:", err);
+    const patientIds = Object.keys(patients);
+
+    if (patientIds.length === 0) {
+      console.log("Demo Telegram: patient list is empty.");
+      return;
     }
 
-    const message =
-      `ALERT: ${alert.severity || "FALL"} event for patient ${patientId}. ` +
-      `HR: ${alert.heartRate}, SpO2: ${alert.spo2}. ` +
-      (location ? `Location: https://maps.google.com/?q=${location.lat},${location.lng}` : "");
+    const openings = [
+      "CarePulse demo check-in",
+      "Your CarePulse presentation update",
+      "CarePulse simulated health summary",
+      "CarePulse demo monitoring report",
+      "CarePulse status update — DEMO",
+    ];
 
-    // SMS - wrapped so a missing/invalid Twilio trial number doesn't kill the whole function
-    for (const doc of contacts.docs || []) {
+    const fallStatuses = [
+      "Simulated fall status: clear",
+      "Demo fall monitoring: no fall indicated",
+      "No simulated fall detected",
+    ];
+
+    for (const patientId of patientIds) {
+      // Random demo values only. Never used for emergency decisions.
+      const heartRate = 65 + Math.floor(Math.random() * 36);
+      const spo2 = 95 + Math.floor(Math.random() * 6);
+      const temperature =
+        Math.round((36.2 + Math.random() * 1.5) * 10) / 10;
+
+      const opening =
+        openings[Math.floor(Math.random() * openings.length)];
+
+      const fallStatus =
+        fallStatuses[Math.floor(Math.random() * fallStatuses.length)];
+
+      const message = [
+        "SIMULATED DEMO DATA ",
+        "",
+        `🩺 ${opening}`,
+        `Patient ID: ${patientId}`,
+        `Heart rate: ${heartRate} BPM (simulated)`,
+        `SpO₂: ${spo2}% (simulated)`,
+        `Temperature: ${temperature.toFixed(1)} °C (simulated)`,
+        fallStatus,
+        "",
+        `Demo message time: ${new Date().toLocaleString("en-IN", {
+          timeZone: "Asia/Kolkata",
+        })}`,
+        "For project presentation only. ",
+      ].join("\n");
+
       try {
-        await twilio.messages.create({
-          body: message,
-          from: TWILIO_FROM,
-          to: doc.data().phone,
-        });
-      } catch (err) {
-        console.error(`SMS to ${doc.id} failed:`, err.message);
+        const result = await sendTelegram(message);
+
+        console.log(
+          `Demo Telegram sent for ${patientId}; ` +
+          `message ID: ${result.messageId}`
+        );
+      } catch (error) {
+        // Do not log the bot token or request URL.
+        console.error(
+          `Demo Telegram failed for ${patientId}:`,
+          error.message
+        );
       }
     }
-
-    // Email
-    try {
-      await sgMail.send({
-        to: PROVIDER_EMAIL,
-        from: SENDER_EMAIL,
-        subject: "Patient Alert",
-        text: message,
-      });
-    } catch (err) {
-      console.error("SendGrid email failed:", err.message);
-    }
-
-    // TODO: FCM push to caregiver app tokens - fetch tokens from
-    // /patients/{patientId}/caregiverTokens and admin.messaging().sendMulticast(...)
-
-    // Always write the log entry, even if a channel above failed
-    // (graceful degradation, matches the report's design)
-    await admin
-      .database()
-      .ref(`/alerts/${patientId}/log`)
-      .push({ ...alert, sentAt: Date.now() });
-  });
+  }
+);

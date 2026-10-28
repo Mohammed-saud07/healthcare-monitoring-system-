@@ -1,0 +1,94 @@
+
+const API_BASE =
+  process.env.REACT_APP_API_BASE || "http://127.0.0.1:5000";
+
+async function authHeaders() {
+  const { auth } = await import("../src/firebase");
+  const user = auth.currentUser;
+
+  if (!user) {
+    throw new Error("Please sign in first.");
+  }
+
+  const tokenResult = await user.getIdTokenResult(true);
+
+  console.log("Firebase auth diagnostic:", {
+    uid: user.uid,
+    email: user.email,
+    patientId: tokenResult.claims.patientId ?? "MISSING",
+    role: tokenResult.claims.role ?? "MISSING",
+  });
+
+  return {
+    Authorization: `Bearer ${tokenResult.token}`,
+  };
+}
+
+export async function fetchVitals(patientId) {
+  const headers = await authHeaders();
+
+  const res = await fetch(
+    `${API_BASE}/api/v1/vitals?patientId=${encodeURIComponent(patientId)}`,
+    { headers }
+  );
+
+  if (!res.ok) {
+    const errorText = await res.text();
+    throw new Error(`fetchVitals failed: ${res.status} - ${errorText}`);
+  }
+
+  return res.json();
+}
+
+export async function fetchAlerts(patientId) {
+  const headers = await authHeaders();
+
+  const res = await fetch(
+    `${API_BASE}/api/v1/alerts/${encodeURIComponent(patientId)}`,
+    { headers }
+  );
+
+  if (!res.ok) {
+    throw new Error(`fetchAlerts failed: ${res.status}`);
+  }
+
+  return res.json();
+}
+
+export async function verifyBackendAuth() {
+  const headers = await authHeaders();
+
+  const res = await fetch(`${API_BASE}/api/v1/auth/me`, { headers });
+
+  if (!res.ok) {
+    throw new Error(`Authentication verification failed: ${res.status}`);
+  }
+
+  return res.json();
+}
+
+
+export async function acknowledgeAlert(patientId, alertId) {
+  const headers = await authHeaders();
+
+  const res = await fetch(
+    `${API_BASE}/api/v1/alerts/${encodeURIComponent(patientId)}/acknowledge`,
+    {
+      method: "POST",
+      headers: {
+        ...headers,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({ alertId }),
+    }
+  );
+
+  if (!res.ok) {
+    const errorText = await res.text();
+    throw new Error(
+      `acknowledgeAlert failed: ${res.status} - ${errorText}`
+    );
+  }
+
+  return res.json();
+}

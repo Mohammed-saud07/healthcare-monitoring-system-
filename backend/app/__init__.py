@@ -4,10 +4,15 @@ from flask_cors import CORS
 from dotenv import load_dotenv
 from app.services.firebase import init_firebase
 
-load_dotenv()
+load_dotenv(
+    os.path.abspath(
+        os.path.join(os.path.dirname(__file__), "..", ".env")
+    )
+)
 
 
 def create_app():
+    from app.routes.patients import patients_bp
     app = Flask(__name__)
     init_firebase()
     app.config["JWT_SECRET_KEY"] = os.getenv("JWT_SECRET_KEY", "change-me")
@@ -22,6 +27,7 @@ def create_app():
     app.register_blueprint(alerts_bp)
     app.register_blueprint(auth_bp)
     app.register_blueprint(thresholds_bp)
+    app.register_blueprint(patients_bp)
 
     @app.route("/health")
     def health():

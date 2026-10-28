@@ -1,0 +1,77 @@
+
+from functools import wraps
+
+from flask import Blueprint, jsonify, request
+from firebase_admin import auth as firebase_auth
+
+auth_bp = Blueprint("auth", __name__)
+
+def require_patient_access(patient_id):
+    """Allow access only to the patient assigned to this Firebase user."""
+    from app.services.firebase import firestore_db
+
+    user = getattr(request, "firebase_user", None)
+    if not user:
+        return jsonify({"error": "Authentication required"}), 401
+
+    uid = user.get("uid")
+    if not uid:
+        return jsonify({"error": "Invalid user identity"}), 401
+
+    try:
+        user_doc = firestore_db().collection("users").document(uid).get()
+        if not user_doc.exists:
+            return jsonify({"error": "User mapping not found"}), 403
+
+        mapping = user_doc.to_dict() or {}
+
+        if mapping.get("patientId") != patient_id:
+            return jsonify({"error": "Access denied for this patient"}), 403
+
+        if mapping.get("role") != "patient":
+            return jsonify({"error": "Patient role required"}), 403
+
+    except Exception:
+        return jsonify({"error": "Authorization check failed"}), 500
+
+    return None
+
+
+def require_auth(view_func):
+    """Verify a Firebase ID token sent as a Bearer token."""
+
+    @wraps(view_func)
+    def wrapped(*args, **kwargs):
+        header = request.headers.get("Authorization", "")
+
+        if not header.startswith("Bearer "):
+            return jsonify({"error": "Missing Firebase ID token"}), 401
+
+        token = header.split(" ", 1)[1].strip()
+
+        if not token:
+            return jsonify({"error": "Missing Firebase ID token"}), 401
+
+        try:
+            decoded_token = firebase_auth.verify_id_token(token)
+        except Exception:
+            return jsonify({"error": "Invalid or expired Firebase ID token"}), 401
+
+        request.firebase_user = decoded_token
+        return view_func(*args, **kwargs)
+
+    return wrapped
+
+
+@auth_bp.route("/api/v1/auth/me", methods=["GET"])
+@require_auth
+def current_user():
+    """Return the identity associated with the verified Firebase token."""
+
+    user = request.firebase_user
+
+    return jsonify({
+        "uid": user.get("uid"),
+        "email": user.get("email"),
+        "email_verified": user.get("email_verified", False),
+    }), 200
